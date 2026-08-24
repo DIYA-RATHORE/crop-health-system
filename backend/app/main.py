@@ -11,6 +11,7 @@ include kiye jayenge. Abhi kuch bhi extra add nahi kiya gaya hai.
 
 from fastapi import FastAPI
 from app.routes.upload import router as upload_router
+from app.routes.analyze import router as analyze_router
 
 app = FastAPI(
     title="Crop Health System - Backend",
@@ -18,7 +19,7 @@ app = FastAPI(
     version="0.1.0",
 )
 app.include_router(upload_router, prefix="/api")
-
+app.include_router(analyze_router)
 
 @app.get("/")
 def health_check():
