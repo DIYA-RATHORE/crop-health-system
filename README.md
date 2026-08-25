@@ -30,7 +30,7 @@ It calculates an overall **Weather Impact Risk Score (0–100%)**, classifies th
 
 ### Step 1: Open the Project in VS Code
 1. Open VS Code.
-2. Select **File > Open Folder...** and choose the project directory (`my_gravity`).
+2. Select **File > Open Folder...** and choose the project directory (`weather_analysis`).
 
 ### Step 2: Open the Integrated Terminal
 - Press ``Ctrl + ` `` (control + backtick) or select **Terminal > New Terminal** from the top menu.
