@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from src.database.db import get_db
 from src.database import crud
+from src.database import models
 from src.api.schemas.disease_schema import (
     DiseaseAnalysisCreate,
     DiseaseAnalysisResponse,

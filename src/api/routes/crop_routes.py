@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from src.database.db import get_db
 from src.database import crud
-from src.api.schemas.crop_schema import CropResponse
+from src.api.schemas.crop_schema import CropResponse, CropCreate
 
 
 router = APIRouter(
@@ -63,3 +63,23 @@ def get_crop(
         )
 
     return crop
+
+
+@router.post("/", response_model=CropResponse)
+def create_crop(
+    crop: CropCreate,
+    db: Session = Depends(get_db)
+):
+    existing = crud.get_crop_by_name(db, crop.name)
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="Crop already exists in catalog"
+        )
+
+    return crud.create_crop(
+        db,
+        **crop.model_dump()
+    )
+

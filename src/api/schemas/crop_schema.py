@@ -19,5 +19,3 @@ class CropResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-   

@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from src.database import models
 from src.logger import get_logger
 from src.exception import CustomException
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 
 logger = get_logger(__name__)
 
@@ -159,7 +161,7 @@ def get_crop_by_id(db: Session, crop_id: int):
 def get_crop_by_name(db: Session, name: str):
     try:
         return db.query(models.Crop).filter(
-            models.Crop.name == name
+            func.lower(models.Crop.name) == func.lower(name.strip())
         ).first()
 
     except Exception as e:
@@ -172,7 +174,6 @@ def get_all_crops(db: Session):
 
     except Exception as e:
         raise CustomException(e, sys)
-
 
 # ---------------- Field ----------------
 
@@ -210,13 +211,15 @@ def create_field(
 
 def get_field_by_id(db: Session, field_id: int):
     try:
-        return db.query(models.Field).filter(
+        return db.query(models.Field).options(
+            joinedload(models.Field.crop),
+            joinedload(models.Field.farmer),
+        ).filter(
             models.Field.id == field_id
         ).first()
 
     except Exception as e:
         raise CustomException(e, sys)
-
 
 def get_fields_by_farmer(db: Session, farmer_id: int):
     try:
