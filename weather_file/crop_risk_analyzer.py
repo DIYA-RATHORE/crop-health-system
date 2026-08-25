@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Crop Weather Risk & Suggestion Analyzer
 A simple, zero-dependency Python script to predict crop weather risks,
@@ -14,8 +13,41 @@ import urllib.request
 import urllib.parse
 
 # Constants
-CSV_FILE = 'All-India District-wise Crop and Climate Dataset (19842017).csv'
+import gzip
+import zipfile
+
+CSV_FILE = "All-India District-wise Crop and Climate Dataset (19842017).csv"
+CSV_FILE_GZ = CSV_FILE + ".gz"
+CSV_FILE_ZIP = CSV_FILE + ".zip"
 CACHE_FILE = 'crop_data_cache.json'
+
+def open_dataset():
+    """
+    Opens the dataset in text mode, transparently handling a compressed
+    version of the file so the repo can ship a GitHub-friendly file size.
+    Supports (in order of preference):
+      1. .csv.gz  (created with gzip, e.g. on Mac/Linux)
+      2. .csv.zip (created with Windows' built-in "Send to > Compressed folder")
+      3. plain .csv (uncompressed, local use)
+    """
+    if os.path.exists(CSV_FILE_GZ):
+        return gzip.open(CSV_FILE_GZ, 'rt', encoding='utf-8', newline='')
+    if os.path.exists(CSV_FILE_ZIP):
+        zf = zipfile.ZipFile(CSV_FILE_ZIP, 'r')
+        # Find the CSV inside the zip regardless of its exact internal name
+        inner_names = [n for n in zf.namelist() if n.lower().endswith('.csv')]
+        if not inner_names:
+            print_error(f"No .csv file found inside '{CSV_FILE_ZIP}'.")
+            sys.exit(1)
+        import io
+        raw = zf.read(inner_names[0])
+        zf.close()
+        return io.StringIO(raw.decode('utf-8'))
+    if os.path.exists(CSV_FILE):
+        return open(CSV_FILE, 'r', encoding='utf-8', newline='')
+    print_error(f"Dataset file not found. Expected one of '{CSV_FILE_GZ}', '{CSV_FILE_ZIP}', or '{CSV_FILE}' in the current directory.")
+    print_info("Please ensure the dataset file is placed in the same folder as this script.")
+    sys.exit(1)
 
 # ANSI Color Codes for beautiful terminal styling
 COLOR_RESET = "\033[0m"
@@ -79,10 +111,10 @@ def print_error(message):
     print(f"{COLOR_RED}{SYM_ERROR} {message}{COLOR_RESET}")
 
 def check_dataset_exists():
-    """Checks if the dataset CSV file is present in the workspace."""
-    if not os.path.exists(CSV_FILE):
-        print_error(f"Dataset file '{CSV_FILE}' not found in the current directory.")
-        print_info("Please ensure the CSV file is placed in the same folder as this script.")
+    """Checks if the dataset file (compressed or plain) is present in the workspace."""
+    if not os.path.exists(CSV_FILE_GZ) and not os.path.exists(CSV_FILE_ZIP) and not os.path.exists(CSV_FILE):
+        print_error(f"Dataset file not found. Expected one of '{CSV_FILE_GZ}', '{CSV_FILE_ZIP}', or '{CSV_FILE}' in the current directory.")
+        print_info("Please ensure the dataset file is placed in the same folder as this script.")
         sys.exit(1)
 
 def get_crop_hierarchy():
@@ -101,7 +133,7 @@ def get_crop_hierarchy():
     hierarchy = {}
     
     try:
-        with open(CSV_FILE, 'r', encoding='utf-8') as f:
+        with open_dataset() as f:
             reader = csv.DictReader(f)
             count = 0
             for row in reader:
@@ -151,7 +183,7 @@ def load_historical_data(target_state, target_district, target_crop):
     
     print_info(f"Searching dataset for {target_crop.title()} records in {target_district.title()}...")
     
-    with open(CSV_FILE, 'r', encoding='utf-8') as f:
+    with open_dataset() as f:
         reader = csv.DictReader(f)
         for row in reader:
             row_crop = row['Crops'].strip().lower()
