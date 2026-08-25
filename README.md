@@ -18,7 +18,8 @@ It calculates an overall **Weather Impact Risk Score (0–100%)**, classifies th
 4. **Historical Lookup**:
    - Reads the district-wide dataset to calculate historical averages, past yields, and the probability of weather risks in the region.
 5. **Robust Offline Mode**: If the API call fails or there is no internet connection, the script gracefully prompts you to type or simulate current weather parameters manually so it can still run the risk model offline.
-6. **Smart Initialization Cache**: To prevent loading a heavy 79MB CSV file every time you run the script, it scans the dataset once and saves a local hierarchy cache file (`crop_data_cache.json`). Subsequent runs start instantly!
+6. **Smart Initialization Cache**: To prevent loading a heavy CSV file every time you run the script, it scans the dataset once and saves a local hierarchy cache file (`crop_data_cache.json`). Subsequent runs start instantly!
+7. **GitHub-Friendly Compressed Dataset**: The raw CSV is ~79MB, which is over GitHub's 25MB web-upload limit (and close to the 50MB soft warning for git pushes). The repo ships a **zip-compressed** version instead — `All-India District-wise Crop and Climate Dataset (19842017).csv.zip` (~14MB) — and the script reads it directly, in-memory, with Python's built-in `zipfile` module. No `pip install` needed, and no third-party tool needed to create the zip either — Windows can zip files natively (right-click → *Send to* → *Compressed (zipped) folder*), as can macOS (right-click → *Compress*) and Linux (`zip` command). A `.gz` version is also supported if you prefer that instead.
 
 ---
 
@@ -26,11 +27,17 @@ It calculates an overall **Weather Impact Risk Score (0–100%)**, classifies th
 
 ### Prerequisites
 - Make sure you have **Python 3** installed on your computer.
-- Ensure the file `All-India District-wise Crop and Climate Dataset (19842017).csv` is in the same folder as `crop_risk_analyzer.py`.
+- Ensure the file `All-India District-wise Crop and Climate Dataset (19842017).csv.zip` is in the same folder as `crop_risk_analyzer.py`. (The script checks for `.gz` first, then `.zip`, then falls back to a plain `.csv` — whichever one you have.)
+
+### If you need to (re-)create the compressed file yourself on Windows
+1. Right-click `All-India District-wise Crop and Climate Dataset (19842017).csv`
+2. Select **Send to → Compressed (zipped) folder**
+3. Windows creates a `.zip` file right next to it, named the same but ending in `.zip` — that's the file the script expects. It'll be roughly 14 MB instead of 79 MB.
+4. Upload that `.zip` file (not the original `.csv`) to GitHub.
 
 ### Step 1: Open the Project in VS Code
 1. Open VS Code.
-2. Select **File > Open Folder...** and choose the project directory (`weather_analysis`).
+2. Select **File > Open Folder...** and choose the project directory (`my_gravity`).
 
 ### Step 2: Open the Integrated Terminal
 - Press ``Ctrl + ` `` (control + backtick) or select **Terminal > New Terminal** from the top menu.
