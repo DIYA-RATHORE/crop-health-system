@@ -9,8 +9,11 @@ import sys
 import csv
 import json
 import math
+import ssl
+import socket
 import urllib.request
 import urllib.parse
+import urllib.error
 
 # Constants
 import gzip
@@ -109,6 +112,10 @@ def print_warning(message):
 
 def print_error(message):
     print(f"{COLOR_RED}{SYM_ERROR} {message}{COLOR_RESET}")
+
+def print_debug(message):
+    if os.environ.get('CROP_DEBUG'):
+        print(f"{COLOR_CYAN}[DEBUG] {message}{COLOR_RESET}")
 
 def check_dataset_exists():
     """Checks if the dataset file (compressed or plain) is present in the workspace."""
@@ -210,43 +217,150 @@ def load_historical_data(target_state, target_district, target_crop):
                 
     return crop_ideals, historical_records
 
+# ---------------------------------------------------------------------------
+# Open-Meteo integration
+# ---------------------------------------------------------------------------
+# Open-Meteo (https://open-meteo.com) is a free, no-API-key weather service.
+# We use two of its endpoints:
+#   1. Geocoding API  - resolves a place name to latitude/longitude
+#   2. Forecast API   - returns today's temperature/rain/wind/humidity for
+#      a given latitude/longitude
+#
+# ---------------------------------------------------------------------------
+
+_SSL_CONTEXT = None
+
+def _get_ssl_context():
+    """Builds (once) an SSL context, falling back to unverified only as a
+    last resort so we can tell the user *that* happened."""
+    global _SSL_CONTEXT
+    if _SSL_CONTEXT is not None:
+        return _SSL_CONTEXT
+    try:
+        _SSL_CONTEXT = ssl.create_default_context()
+    except Exception:
+        _SSL_CONTEXT = ssl._create_unverified_context()
+    return _SSL_CONTEXT
+
+def _open_meteo_get(url, timeout=10):
+    """
+    Shared HTTP GET helper for all Open-Meteo calls.
+    Returns (data_dict_or_None, error_message_or_None) so callers can decide
+    how to react, and so we always know *why* something failed.
+    """
+    req = urllib.request.Request(url, headers={'User-Agent': 'CropWeatherRiskAnalyzer/1.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout, context=_get_ssl_context()) as response:
+            status = response.getcode()
+            raw = response.read().decode('utf-8')
+            if status != 200:
+                return None, f"HTTP {status} from Open-Meteo: {raw[:200]}"
+            try:
+                return json.loads(raw), None
+            except json.JSONDecodeError as e:
+                return None, f"Open-Meteo returned non-JSON response: {e}"
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode('utf-8')[:200]
+        except Exception:
+            pass
+        return None, f"HTTP {e.code} error from Open-Meteo ({e.reason}). {body}"
+    except urllib.error.URLError as e:
+        reason = e.reason
+        if isinstance(reason, ssl.SSLError):
+            return None, f"SSL certificate verification failed ({reason}). Your network/proxy may be intercepting HTTPS traffic."
+        if isinstance(reason, socket.timeout):
+            return None, "Connection to Open-Meteo timed out. Check your internet connection or firewall/proxy settings."
+        if isinstance(reason, socket.gaierror):
+            return None, f"Could not resolve api.open-meteo.com / geocoding-api.open-meteo.com ({reason}). DNS may be blocked."
+        return None, f"Could not reach Open-Meteo: {reason}"
+    except socket.timeout:
+        return None, "Connection to Open-Meteo timed out."
+    except Exception as e:
+        return None, f"Unexpected error calling Open-Meteo: {type(e).__name__}: {e}"
+
+def test_open_meteo_connection():
+    """
+    Standalone connectivity check. Run with:
+        python crop_weather_analyzer.py --test-connection
+    Prints a clear pass/fail for each Open-Meteo endpoint instead of letting
+    a failure hide silently behind the manual-entry fallback.
+    """
+    print_header("OPEN-METEO CONNECTIVITY TEST")
+
+    print_info("Testing Geocoding API (geocoding-api.open-meteo.com)...")
+    geo_url = "https://geocoding-api.open-meteo.com/v1/search?name=Pune&count=1&language=en&format=json"
+    data, err = _open_meteo_get(geo_url)
+    if err:
+        print_error(f"Geocoding API: FAILED - {err}")
+    elif data and data.get('results'):
+        r = data['results'][0]
+        print_success(f"Geocoding API: OK - resolved 'Pune' to {r['latitude']:.4f}, {r['longitude']:.4f}")
+    else:
+        print_warning("Geocoding API: reachable but returned no results for 'Pune' (unexpected).")
+
+    print_info("Testing Forecast API (api.open-meteo.com)...")
+    fc_url = ("https://api.open-meteo.com/v1/forecast?latitude=18.5204&longitude=73.8567"
+              "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max"
+              "&current=relative_humidity_2m&timezone=auto")
+    data, err = _open_meteo_get(fc_url)
+    if err:
+        print_error(f"Forecast API: FAILED - {err}")
+    elif data and 'daily' in data:
+        tmax = data['daily']['temperature_2m_max'][0]
+        print_success(f"Forecast API: OK - Pune today's max temp = {tmax}{SYM_DEG}C")
+    else:
+        print_warning("Forecast API: reachable but response missing expected fields.")
+
+    print_info("If either test failed, share the exact error text above with your network/IT team -")
+    print_info("it tells you whether this is DNS, SSL/proxy interception, a timeout, or an HTTP error,")
+    print_info("rather than the app just silently dropping to manual weather entry.")
+
 def geocode_district(state, district):
     """
-    Geocodes district and state to latitude/longitude using Open-Meteo Geocoding API.
+    Geocodes district and state to latitude/longitude using the Open-Meteo
+    Geocoding API. Tries several query variants, since exact census district
+    names in the dataset often don't match Open-Meteo's place database.
     """
-    query = f"{district}, {state}, India"
-    print_info(f"Geocoding location: {query}...")
-    url = f"https://geocoding-api.open-meteo.com/v1/search?name={urllib.parse.quote(query)}&count=5&language=en&format=json"
-    
-    try:
-        req = urllib.request.Request(
-            url, 
-            headers={'User-Agent': 'Mozilla/5.0'}
-        )
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            results = data.get('results', [])
-            
-            # Fallback if query returns nothing
-            if not results:
-                url_fallback = f"https://geocoding-api.open-meteo.com/v1/search?name={urllib.parse.quote(district)}&count=5&language=en&format=json"
-                req_fallback = urllib.request.Request(url_fallback, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req_fallback, timeout=10) as res_fallback:
-                    data = json.loads(res_fallback.read().decode('utf-8'))
-                    results = data.get('results', [])
-            
-            # Try to find the match in India
-            for result in results:
-                if result.get('country', '').lower() == 'india':
-                    print_success(f"Location resolved: Lat {result['latitude']:.4f}, Lon {result['longitude']:.4f}")
-                    return float(result['latitude']), float(result['longitude'])
-            
-            if results:
-                print_success(f"Location resolved (First match): Lat {results[0]['latitude']:.4f}, Lon {results[0]['longitude']:.4f}")
-                return float(results[0]['latitude']), float(results[0]['longitude'])
-    except Exception as e:
-        print_warning(f"Geocoding API failed: {e}")
-        
+    candidates = [
+        f"{district}, {state}, India",
+        f"{district} District, {state}, India",
+        f"{district}, India",
+        district,
+    ]
+
+    last_err = None
+    for query in candidates:
+        print_info(f"Geocoding location: {query}...")
+        url = f"https://geocoding-api.open-meteo.com/v1/search?name={urllib.parse.quote(query)}&count=5&language=en&format=json"
+        data, err = _open_meteo_get(url)
+        print_debug(f"GET {url} -> err={err}")
+
+        if err:
+            last_err = err
+            print_warning(f"Geocoding attempt '{query}' failed: {err}")
+            continue
+
+        results = data.get('results', [])
+        if not results:
+            print_debug(f"No results for query variant '{query}', trying next fallback...")
+            continue
+
+        # Prefer an explicit India match
+        for result in results:
+            if result.get('country', '').lower() == 'india':
+                print_success(f"Location resolved: Lat {result['latitude']:.4f}, Lon {result['longitude']:.4f} (matched '{query}')")
+                return float(result['latitude']), float(result['longitude'])
+
+        # Otherwise take the first result
+        print_success(f"Location resolved (first match, country unverified): Lat {results[0]['latitude']:.4f}, Lon {results[0]['longitude']:.4f}")
+        return float(results[0]['latitude']), float(results[0]['longitude'])
+
+    if last_err:
+        print_error(f"Geocoding failed for all query variants. Last error: {last_err}")
+    else:
+        print_error(f"Geocoding API reachable, but no match found for '{district}, {state}' under any query variant tried.")
     return None
 
 def fetch_current_weather(lat, lon):
@@ -255,45 +369,47 @@ def fetch_current_weather(lat, lon):
     max wind speed, and current relative humidity) from Open-Meteo.
     """
     print_info("Fetching weather forecast from Open-Meteo...")
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max&current=relative_humidity_2m&timezone=auto"
-    
+    url = (f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
+           f"&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max"
+           f"&current=relative_humidity_2m&timezone=auto")
+
+    data, err = _open_meteo_get(url)
+    print_debug(f"GET {url} -> err={err}")
+
+    if err:
+        print_warning(f"Weather API failed: {err}")
+        return None
+
     try:
-        req = urllib.request.Request(
-            url, 
-            headers={'User-Agent': 'Mozilla/5.0'}
-        )
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            daily = data.get('daily', {})
-            current = data.get('current', {})
-            
-            tmax = daily.get('temperature_2m_max', [None])[0]
-            tmin = daily.get('temperature_2m_min', [None])[0]
-            rain = daily.get('precipitation_sum', [None])[0]
-            wind_speed = daily.get('wind_speed_10m_max', [None])[0]
-            humidity = current.get('relative_humidity_2m')
-            
-            # Direct fallbacks
-            if tmax is None: tmax = current.get('temperature_2m', 30.0)
-            if tmin is None: tmin = current.get('temperature_2m', 20.0)
-            if rain is None: rain = 0.0
-            if wind_speed is None: wind_speed = current.get('wind_speed_10m', 10.0) # km/h
-            if humidity is None: humidity = 60.0
-            
-            # Convert wind speed from km/h to m/s to align with WS2M in dataset
-            ws_mps = float(wind_speed) / 3.6
-            
-            return {
-                'temp_max': float(tmax),
-                'temp_min': float(tmin),
-                'rain': float(rain),
-                'humidity': float(humidity),
-                'wind_speed': ws_mps
-            }
+        daily = data.get('daily', {})
+        current = data.get('current', {})
+
+        tmax = daily.get('temperature_2m_max', [None])[0]
+        tmin = daily.get('temperature_2m_min', [None])[0]
+        rain = daily.get('precipitation_sum', [None])[0]
+        wind_speed = daily.get('wind_speed_10m_max', [None])[0]
+        humidity = current.get('relative_humidity_2m')
+
+        # Direct fallbacks
+        if tmax is None: tmax = current.get('temperature_2m', 30.0)
+        if tmin is None: tmin = current.get('temperature_2m', 20.0)
+        if rain is None: rain = 0.0
+        if wind_speed is None: wind_speed = current.get('wind_speed_10m', 10.0)  # km/h
+        if humidity is None: humidity = 60.0
+
+        # Convert wind speed from km/h to m/s to align with WS2M in dataset
+        ws_mps = float(wind_speed) / 3.6
+
+        return {
+            'temp_max': float(tmax),
+            'temp_min': float(tmin),
+            'rain': float(rain),
+            'humidity': float(humidity),
+            'wind_speed': ws_mps
+        }
     except Exception as e:
-        print_warning(f"Weather API failed: {e}")
-        
-    return None
+        print_warning(f"Weather API returned an unexpected response shape: {type(e).__name__}: {e}")
+        return None
 
 def calculate_risk(current, ideals, hist_avgs=None):
     """
@@ -640,6 +756,10 @@ def run_interactive_cli():
 
 if __name__ == "__main__":
     try:
+        if len(sys.argv) >= 2 and sys.argv[1] == "--test-connection":
+            test_open_meteo_connection()
+            sys.exit(0)
+
         # Check command line args for non-interactive automation if needed
         if len(sys.argv) >= 4:
             state_arg = sys.argv[1]
