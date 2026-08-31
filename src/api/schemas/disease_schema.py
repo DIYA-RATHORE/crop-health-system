@@ -12,6 +12,7 @@ class DiseaseAnalysisCreate(BaseModel):
     disease: str
     confidence: float
     severity: str
+    
 
 
 class DiseaseAnalysisUpdate(BaseModel):
@@ -31,7 +32,7 @@ class DiseaseAnalysisResponse(BaseModel):
     crop: str
     disease: str
     confidence: float
-    severity: str
+    severity: Optional[str] = None
     status: AnalysisStatus
     created_at: datetime
 

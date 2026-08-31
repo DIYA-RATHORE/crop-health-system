@@ -5,8 +5,7 @@ from src.api.routes import farmer_routes, field_routes, disease_routes, crop_rou
 
 app = FastAPI(title="Crop Health system")
 
-# Allows the frontend (running on a different port/domain) to call this backend.
-# Tighten allow_origins to your actual frontend URL before deploying.
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
