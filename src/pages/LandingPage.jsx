@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import Button from "../components/Button";
+import ChatbotWidget from "../components/ChatbotWidget";
 import WeatherCard from "../components/WeatherCard";
 import RiskCard from "../components/RiskCard";
 import AnalysisCard from "../components/AnalysisCard";
@@ -179,7 +180,7 @@ export default function LandingPage() {
             <span className="section-tag">The Challenge</span>
             <h2 className="section-title">Crop problems can spread before they are noticed.</h2>
             <p className="section-subtitle" style={{ margin: "0 auto" }}>
-              Early detection can help farmers respond before disease causes serious crop loss. Protect your fields with crop-health-system scans.
+              Early detection can help farmers respond before disease causes serious crop loss. Protect your fields with AgriGuard scans.
             </p>
           </div>
 
@@ -441,13 +442,13 @@ export default function LandingPage() {
                 🌱
               </div>
               <div>
-                <div style={{ fontSize: "0.85rem", fontWeight: "bold" }}>crop-health-system</div>
+                <div style={{ fontSize: "0.85rem", fontWeight: "bold" }}>AgriGuard</div>
                 <div style={{ fontSize: "0.65rem", opacity: 0.8 }}>Online Alert System</div>
               </div>
             </div>
             <div className="phone-chat-bg">
               <div className="whatsapp-message">
-                <h5>🌱 crop-health-system Alert</h5>
+                <h5>🌱 AgriGuard Alert</h5>
                 <span className="alert-header">Risk: HIGH 🔴</span>
                 <p style={{ marginTop: "0.25rem" }}>
                   Possible Early Blight detected in your Tomato field. High humidity and rain expected. Please check the affected plants.
@@ -517,6 +518,7 @@ export default function LandingPage() {
       </section>
 
       <Footer />
+      <ChatbotWidget />
     </div>
   );
 }

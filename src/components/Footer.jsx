@@ -9,7 +9,7 @@ export default function Footer() {
         <div className="footer-col">
           <div className="logo-container" style={{ marginBottom: "1rem" }}>
             <Sprout className="logo-icon" size={24} />
-            <span style={{ color: "#fff" }}>crop-health-system</span>
+            <span style={{ color: "#fff" }}>AgriGuard</span>
           </div>
           <p style={{ fontSize: "0.9rem", lineHeight: "1.5" }}>
             Know your crop. Act before it's too late. Supporting farmers worldwide with weather-aware early crop disease detection.
@@ -48,7 +48,7 @@ export default function Footer() {
       </div>
 
       <div className="container footer-bottom">
-        <p>&copy; {new Date().getFullYear()} crop-health-system. Built for Agriculture Technology Hackathon. All rights reserved.</p>
+        <p>&copy; {new Date().getFullYear()} AgriGuard. Built for Agriculture Technology Hackathon. All rights reserved.</p>
       </div>
     </footer>
   );

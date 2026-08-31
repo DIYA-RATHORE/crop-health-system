@@ -36,7 +36,7 @@ export default function Navbar() {
       <div className="container nav-main">
         <Link to="/" className="logo-container">
           <Sprout className="logo-icon" size={28} strokeWidth={2.5} />
-          <span>crop-health-system</span>
+          <span>AgriGuard</span>
         </Link>
 
         {/* Desktop Links */}

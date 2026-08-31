@@ -65,7 +65,7 @@ export default function AppLayout({ children, title }) {
         <div className="app-sidebar-header">
           <Link to="/" className="logo-container">
             <Sprout className="logo-icon" size={24} />
-            <span style={{ fontWeight: 800 }}>crop-health-system</span>
+            <span style={{ fontWeight: 800 }}>AgriGuard</span>
           </Link>
         </div>
 
@@ -171,7 +171,7 @@ export default function AppLayout({ children, title }) {
         <header className="app-mobile-nav">
           <Link to="/" className="logo-container" style={{ fontSize: "1.1rem" }}>
             <Sprout className="logo-icon" size={20} />
-            <span>crop-health-system</span>
+            <span>AgriGuard</span>
           </Link>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <select
